@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Система управления доступом{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <!-- Canvas частиц — позади всего контента -->
+    <canvas id="particleCanvas" style="
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        pointer-events: none;
+        z-index: 0;
+    "></canvas>
+
+    <nav style="position:relative;z-index:100;">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>Access Control</span>
+            </div>
+            <button class="mobile-menu-toggle" aria-label="Меню">
+                <i class="fas fa-bars"></i>
+            </button>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('dashboard') }}"
+                        class="{% if request.endpoint == 'dashboard' %}active{% endif %}"><i class="fas fa-home"></i>
+                        Главная</a></li>
+                <li><a href="{{ url_for('employees') }}"
+                        class="{% if request.endpoint == 'employees' %}active{% endif %}"><i class="fas fa-users"></i>
+                        Сотрудники</a></li>
+                <li><a href="{{ url_for('keys') }}" class="{% if request.endpoint == 'keys' %}active{% endif %}"><i
+                            class="fas fa-key"></i> Ключи</a></li>
+                <li><a href="{{ url_for('points') }}" class="{% if request.endpoint == 'points' %}active{% endif %}"><i
+                            class="fas fa-door-open"></i> Точки</a></li>
+                <li><a href="{{ url_for('levels') }}" class="{% if request.endpoint == 'levels' %}active{% endif %}"><i
+                            class="fas fa-layer-group"></i> Уровни</a></li>
+                <li><a href="{{ url_for('groups') }}" class="{% if request.endpoint == 'groups' %}active{% endif %}"><i
+                            class="fas fa-users-cog"></i> Группы</a></li>
+                <li><a href="{{ url_for('logs') }}" class="{% if request.endpoint == 'logs' %}active{% endif %}"><i
+                            class="fas fa-history"></i> Логи</a></li>
+                <li><a href="{{ url_for('backup_index') }}"
+                        class="{% if request.endpoint == 'backup_index' %}active{% endif %}"><i
+                            class="fas fa-database"></i> Резервное копирование</a></li>
+            </ul>
+            <div class="user-info">
+                <i class="fas fa-user-circle"></i>
+                <span class="user-name">{{ session.get('username', 'Пользователь') }}</span>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-secondary"><i class="fas fa-sign-out-alt"></i>
+                    <span class="btn-text">Выход</span></a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="position:relative;z-index:1;">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block scripts %}{% endblock %}
+    <script>
+        // Мобильное меню
+        document.addEventListener('DOMContentLoaded', function () {
+            const menuToggle = document.querySelector('.mobile-menu-toggle');
+            const navLinks = document.querySelector('.nav-links');
+            const body = document.body;
+
+            if (menuToggle) {
+                menuToggle.addEventListener('click', function () {
+                    navLinks.classList.toggle('mobile-open');
+                    menuToggle.classList.toggle('active');
+                    body.classList.toggle('menu-open');
+                });
+
+                const links = navLinks.querySelectorAll('a');
+                links.forEach(link => {
+                    link.addEventListener('click', function () {
+                        navLinks.classList.remove('mobile-open');
+                        menuToggle.classList.remove('active');
+                        body.classList.remove('menu-open');
+                    });
+                });
+
+                document.addEventListener('click', function (e) {
+                    if (!navLinks.contains(e.target) && !menuToggle.contains(e.target)) {
+                        navLinks.classList.remove('mobile-open');
+                        menuToggle.classList.remove('active');
+                        body.classList.remove('menu-open');
+                    }
+                });
+            }
+        });
+
+        function clearSearch(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.value = '';
+            input.dispatchEvent(new Event('input'));
+            input.focus();
+        }
+    </script>
+
+    <!-- ✦ Particle field — точки дрейфуют, курсор их мягко расталкивает ✦ -->
+    <script>
+        (function () {
+            const canvas = document.getElementById('particleCanvas');
+            const ctx = canvas.getContext('2d');
+
+            let W = canvas.width = window.innerWidth;
+            let H = canvas.height = window.innerHeight;
+
+            // Позиция мыши — начинаем далеко за экраном, чтобы не влиять до движения
+            const mouse = { x: -9999, y: -9999 };
+
+            window.addEventListener('mousemove', e => {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+            });
+            window.addEventListener('mouseleave', () => {
+                mouse.x = -9999;
+                mouse.y = -9999;
+            });
+            window.addEventListener('resize', () => {
+                W = canvas.width = window.innerWidth;
+                H = canvas.height = window.innerHeight;
+            });
+
+            // ─── Настройки ───────────────────────────────────────────
+            const COUNT = 150;      // кол-во точек
+            const MOUSE_R = 120;      // радиус реакции на курсор
+            const PUSH_FORCE = 0.3;      // максимальная сила отталкивания
+            const MAX_SPEED = 0.6;      // лимит скорости дрейфа
+            const FRICTION = 0.96;     // инерция после расталкивания
+            const DRIFT_MULT = 0.25;     // скорость случайного дрейфа
+            const LINK_DIST = 100;      // макс. дистанция соединения
+            // ─────────────────────────────────────────────────────────
+
+            // Цветовая гамма сайта
+            const DOT_COLOR = '102,126,234';  // primary purple-blue
+            const LINE_COLOR = '118,75,162';   // secondary purple
+
+            class Dot {
+                constructor() {
+                    this.x = Math.random() * W;
+                    this.y = Math.random() * H;
+                    // очень медленный случайный дрейф
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * DRIFT_MULT;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+
+                    this.r = Math.random() * 2.5 + 1.8;    // 1.8 – 4.3px
+                    this.alpha = Math.random() * 0.35 + 0.45; // 0.45 – 0.80
+                }
+
+                update() {
+                    // Мягкое отталкивание от курсора
+                    const dx = this.x - mouse.x;
+                    const dy = this.y - mouse.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                    if (dist < MOUSE_R) {
+                        // Сила обратно пропорциональна расстоянию (1 = вплотную, 0 = на краю)
+                        const strength = (1 - dist / MOUSE_R) * PUSH_FORCE;
+                        this.vx += (dx / dist) * strength;
+                        this.vy += (dy / dist) * strength;
+                    }
+
+                    // Ограничение скорости
+                    const spd = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                    if (spd > MAX_SPEED) {
+                        this.vx = (this.vx / spd) * MAX_SPEED;
+                        this.vy = (this.vy / spd) * MAX_SPEED;
+                    }
+
+                    // Затухание — точка возвращается к плавному дрейфу
+                    this.vx *= FRICTION;
+                    this.vy *= FRICTION;
+
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    // Мягкий wrap-around по краям
+                    if (this.x < -20) this.x = W + 20;
+                    if (this.x > W + 20) this.x = -20;
+                    if (this.y < -20) this.y = H + 20;
+                    if (this.y > H + 20) this.y = -20;
+                }
+
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${DOT_COLOR},${this.alpha})`;
+                    ctx.fill();
+                }
+            }
+
+            const dots = Array.from({ length: COUNT }, () => new Dot());
+
+            function drawLinks() {
+                for (let i = 0; i < dots.length; i++) {
+                    for (let j = i + 1; j < dots.length; j++) {
+                        const dx = dots[i].x - dots[j].x;
+                        const dy = dots[i].y - dots[j].y;
+                        const d = dx * dx + dy * dy;  // квадрат дистанции (быстрее)
+                        if (d < LINK_DIST * LINK_DIST) {
+                            const alpha = (1 - Math.sqrt(d) / LINK_DIST) * 0.40;
+                            ctx.strokeStyle = `rgba(${LINE_COLOR},${alpha.toFixed(3)})`;
+                            ctx.lineWidth = 0.7;
+                            ctx.beginPath();
+                            ctx.moveTo(dots[i].x, dots[i].y);
+                            ctx.lineTo(dots[j].x, dots[j].y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            (function loop() {
+                ctx.clearRect(0, 0, W, H);
+                drawLinks();
+                dots.forEach(d => { d.update(); d.draw(); });
+                requestAnimationFrame(loop);
+            })();
+        })();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,50 @@
+# Конфигурация Prometheus для мониторинга системы управления доступом
+
+global:
+  scrape_interval: 15s      # Интервал сбора метрик
+  evaluation_interval: 15s   # Интервал оценки правил alerting
+  external_labels:
+    cluster: 'access-control'
+    environment: 'production'
+
+# Настройка Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Файлы правил alerting
+rule_files:
+  - "alert_rules.yml"
+
+# Конфигурация целей для сбора метрик
+scrape_configs:
+  # Prometheus сам себя мониторит
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Мониторинг Node Exporter (метрики сервера)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          instance: 'access-control-server'
+
+  # Мониторинг PostgreSQL через postgres_exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          database: 'access_control_db'
+          instance: 'postgresql-server'
+
+  # Мониторинг Flask приложения (если добавим метрики)
+  - job_name: 'flask-app'
+    static_configs:
+      - targets: ['host.docker.internal:5001']
+        labels:
+          application: 'access-control'
+          instance: 'flask-app'
+

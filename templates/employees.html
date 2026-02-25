@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+
+{% block title %}Сотрудники - Система управления доступом{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-users"></i> Сотрудники</h2>
+        <button class="btn btn-primary" onclick="openModal('create')"><i class="fas fa-plus"></i> Добавить</button>
+    </div>
+
+    <div class="search-wrapper">
+        <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="employeesSearch" placeholder="Поиск по сотрудникам..." oninput="filterTable(this)">
+            <button class="search-clear" onclick="clearSearch('employeesSearch', this)" tabindex="-1"><i
+                    class="fas fa-times"></i></button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>ФИО</th>
+                <th>Должность</th>
+                <th>Отдел</th>
+                <th>Телефон</th>
+                <th>Email</th>
+                <th>Статус</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody id="employeesTable">
+            {% for emp in employees %}
+            <tr>
+                <td>{{ emp.id }}</td>
+                <td>{{ emp.full_name }}</td>
+                <td>{{ emp.position or '-' }}</td>
+                <td>{{ emp.department or '-' }}</td>
+                <td>
+                    {% if emp.phone %}
+                    {% set d = emp.phone | replace('+', '') | replace(' ', '') | replace('(', '') | replace(')', '') |
+                    replace('-', '') %}
+                    {% if d.startswith('7') or d.startswith('8') %}{% set d = d[1:] %}{% endif %}
+                    {% if d | length >= 10 %}
+                    +7 ({{ d[0:3] }}) {{ d[3:6] }}-{{ d[6:8] }}-{{ d[8:10] }}
+                    {% elif d | length > 0 %}
+                    +{{ emp.phone | replace('+', '') }}
+                    {% else %}
+                    -
+                    {% endif %}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>{{ emp.email or '-' }}</td>
+                <td>{{ 'Активен' if emp.is_active else 'Неактивен' }}</td>
+                <td style="white-space: nowrap;">
+                    <button class="btn btn-sm btn-primary" onclick="openModal('edit', {{ emp | tojson }})"
+                        title="Изменить"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteEmployee({{ emp.id }})" title="Удалить"><i
+                            class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Модальное окно -->
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Добавить сотрудника</h2>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <form id="employeeForm">
+            <input type="hidden" id="employeeId">
+
+            <div class="form-group">
+                <label>ФИО <span style="color: var(--danger-color);">*</span></label>
+                <input type="text" id="fullName" required placeholder="Например: Иванов Иван Иванович">
+                <div class="field-hint">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Укажите полное ФИО сотрудника (фамилия, имя, отчество)</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Должность</label>
+                <input type="text" id="position" placeholder="Например: Менеджер по продажам">
+                <div class="field-hint">
+                    <i class="fas fa-briefcase"></i>
+                    <span>Должность сотрудника в организации</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Отдел</label>
+                <!-- Скрытый input хранит выбранное значение -->
+                <input type="hidden" id="department" name="department">
+                <!-- Кастомный дропдаун -->
+                <div class="custom-select" id="deptDropdown">
+                    <div class="custom-select-trigger" onclick="toggleDeptDropdown()">
+                        <span id="deptLabel">Выберите отдел...</span>
+                        <i class="fas fa-chevron-down custom-select-arrow"></i>
+                    </div>
+                    <div class="custom-select-options" id="deptOptions">
+                        <div class="custom-select-option dept-create" onclick="openDepartmentModal()">
+                            <i class="fas fa-plus"></i>
+                            <span>Создать новый отдел</span>
+                        </div>
+                        <!-- Сюда добавляются отделы из JS -->
+                    </div>
+                </div>
+                <div class="field-hint">
+                    <i class="fas fa-building"></i>
+                    <span>Выберите отдел или создайте новый. × — удалить отдел</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Телефон</label>
+                <input type="tel" id="phone" placeholder="+7 (___) ___-__-__" autocomplete="off"
+                    oninput="handlePhoneInput(this)" onkeydown="handlePhoneKeydown(event, this)" maxlength="18">
+                <div class="field-hint" id="phoneHint">
+                    <i class="fas fa-phone"></i>
+                    <span>Формат: +7 (999) 123-45-67 &mdash; цифры вводятся автоматически</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="email" placeholder="Например: ivanov@company.ru">
+                <div class="field-hint">
+                    <i class="fas fa-envelope"></i>
+                    <span>Корпоративная электронная почта сотрудника</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="isActive" checked> Активен
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Сохранить</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()"><i class="fas fa-times"></i>
+                Отмена</button>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно для создания отдела -->
+<div id="departmentModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2>Создать новый отдел</h2>
+            <span class="close" onclick="closeDepartmentModal()">&times;</span>
+        </div>
+        <form id="departmentForm" onsubmit="createDepartment(event)">
+            <div class="form-group">
+                <label>Название отдела *</label>
+                <input type="text" id="newDepartmentName" required placeholder="Например: IT-отдел">
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Создать</button>
+            <button type="button" class="btn btn-secondary" onclick="closeDepartmentModal()"><i
+                    class="fas fa-times"></i> Отмена</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    let currentAction = 'create';
+    let departments = []; // Список отделов
+
+    // Загрузка списка отделов
+    async function loadDepartments() {
+        try {
+            const response = await fetch('/api/departments');
+            const result = await response.json();
+            if (result.success) {
+                departments = result.departments;
+                renderDeptDropdown();
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки отделов:', error);
+        }
+    }
+
+    // Отрисовка кастомного дропдауна
+    function renderDeptDropdown(selectedValue = '') {
+        const container = document.getElementById('deptOptions');
+        if (!container) return;
+
+        // Фиксируем первый пункт (создать)
+        container.innerHTML = `
+            <div class="custom-select-option dept-create" onclick="openDepartmentModal()">
+                <i class="fas fa-plus"></i>
+                <span>Создать новый отдел</span>
+            </div>
+        `;
+
+        departments.forEach(dept => {
+            const div = document.createElement('div');
+            div.className = 'custom-select-option' + (dept === selectedValue ? ' selected' : '');
+            div.innerHTML = `
+                <span class="dept-name" onclick="selectDept('${escapeHtml(dept)}', '${escapeHtml(dept)}')">${escapeHtml(dept)}</span>
+                <button class="dept-delete-btn" title="Удалить отдел" onclick="deleteDepartment(event, '${escapeHtml(dept)}')">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            container.appendChild(div);
+        });
+
+        // Устанавливаем label
+        if (selectedValue) {
+            document.getElementById('deptLabel').textContent = selectedValue;
+            document.getElementById('deptLabel').style.color = '';
+            document.getElementById('department').value = selectedValue;
+        } else {
+            document.getElementById('deptLabel').textContent = 'Выберите отдел...';
+            document.getElementById('deptLabel').style.color = 'var(--text-light)';
+            document.getElementById('department').value = '';
+        }
+    }
+
+    // Псевдоним для совместимости с openModal
+    function updateDepartmentSelect(selectedValue = '') {
+        renderDeptDropdown(selectedValue);
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function selectDept(value, label) {
+        document.getElementById('department').value = value;
+        document.getElementById('deptLabel').textContent = label;
+        document.getElementById('deptLabel').style.color = value ? '' : 'var(--text-light)';
+        // Убираем выделение у всех, добавляем к выбранному
+        document.querySelectorAll('#deptOptions .custom-select-option').forEach(el => el.classList.remove('selected'));
+        document.getElementById('deptDropdown').classList.remove('open');
+    }
+
+    function toggleDeptDropdown() {
+        document.getElementById('deptDropdown').classList.toggle('open');
+    }
+
+    // Закрытие дропдауна при клике вне него
+    document.addEventListener('click', function (e) {
+        const dd = document.getElementById('deptDropdown');
+        if (dd && !dd.contains(e.target)) dd.classList.remove('open');
+    });
+
+    // Открытие модального окна для создания отдела
+    function openDepartmentModal() {
+        document.getElementById('deptDropdown').classList.remove('open');
+        document.getElementById('departmentModal').style.display = 'block';
+        document.getElementById('newDepartmentName').value = '';
+        setTimeout(() => document.getElementById('newDepartmentName').focus(), 100);
+    }
+
+    // Закрытие модального окна для создания отдела
+    function closeDepartmentModal() {
+        document.getElementById('departmentModal').style.display = 'none';
+    }
+
+    // Создание нового отдела
+    async function createDepartment(e) {
+        e.preventDefault();
+        const departmentName = document.getElementById('newDepartmentName').value.trim();
+        if (!departmentName) { alert('Введите название отдела'); return; }
+
+        try {
+            const response = await fetch('/api/departments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: departmentName })
+            });
+            const result = await response.json();
+            if (result.success) {
+                departments.push(departmentName);
+                departments.sort();
+                renderDeptDropdown(departmentName);
+                closeDepartmentModal();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+
+    // Удаление отдела
+    async function deleteDepartment(e, deptName) {
+        e.stopPropagation(); // не закрывать/открывать дропдаун
+
+        const currentDept = document.getElementById('department').value;
+
+        // Первый запрос — проверяем наличие сотрудников
+        try {
+            let url = `/api/departments/${encodeURIComponent(deptName)}`;
+            let response = await fetch(url, { method: 'DELETE' });
+            let result = await response.json();
+
+            if (result.needs_confirm) {
+                const ok = confirm(
+                    `В отделе "${deptName}" ${result.employees_count} сотрудников.\n` +
+                    `Удалить отдел? Сотрудники останутся, но останутся без отдела.`
+                );
+                if (!ok) return;
+                // Повторяем с force=true
+                response = await fetch(url + '?force=true', { method: 'DELETE' });
+                result = await response.json();
+            }
+
+            if (result.success) {
+                departments = departments.filter(d => d !== deptName);
+                // Если удалённый был выбран — сбрасываем
+                const newSelected = currentDept === deptName ? '' : currentDept;
+                renderDeptDropdown(newSelected);
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+
+    // Загружаем отделы при загрузке страницы
+    loadDepartments();
+
+    function openModal(action, data = null) {
+        const modal = document.getElementById('modal');
+        const form = document.getElementById('employeeForm');
+        const title = document.getElementById('modalTitle');
+
+        currentAction = action;
+
+        if (action === 'create') {
+            title.textContent = 'Добавить сотрудника';
+            form.reset();
+            document.getElementById('employeeId').value = '';
+            updateDepartmentSelect(); // Обновляем список отделов
+        } else if (action === 'edit') {
+            title.textContent = 'Изменить сотрудника';
+            document.getElementById('employeeId').value = data.id;
+            document.getElementById('fullName').value = data.full_name || '';
+            document.getElementById('position').value = data.position || '';
+
+            // Обновляем select с отделами и выбираем нужное значение
+            updateDepartmentSelect(data.department || '');
+
+            // Заполняем поле телефона через маску
+            setPhoneDisplay(data.phone || '');
+            document.getElementById('email').value = data.email || '';
+            document.getElementById('isActive').checked = data.is_active !== false;
+        }
+
+        modal.style.display = 'block';
+
+        // Сбрасываем отображение телефона при создании
+        if (action === 'create') setPhoneDisplay('');
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    window.onclick = function (event) {
+        const modal = document.getElementById('modal');
+        const departmentModal = document.getElementById('departmentModal');
+
+        if (event.target === modal) {
+            closeModal();
+        }
+
+        if (event.target === departmentModal) {
+            closeDepartmentModal();
+        }
+    }
+
+    document.getElementById('employeeForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        // Получаем чистый номер из маскированного значения
+        const maskedPhone = document.getElementById('phone').value.trim();
+        const phoneDigits = maskedPhone.replace(/\D/g, ''); // только цифры
+        // phoneDigits содержит «7» + 10 цифр, итого +79991234567
+        const finalPhone = phoneDigits.length > 1 ? '+' + phoneDigits : '';
+
+        const formData = {
+            full_name: document.getElementById('fullName').value,
+            position: document.getElementById('position').value,
+            department: document.getElementById('department').value,
+            phone: finalPhone,
+            email: document.getElementById('email').value,
+            is_active: document.getElementById('isActive').checked
+        };
+
+        const employeeId = document.getElementById('employeeId').value;
+        const url = employeeId
+            ? `/api/employees/${employeeId}`
+            : '/api/employees';
+
+        const method = employeeId ? 'PUT' : 'POST';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    });
+
+    async function deleteEmployee(id) {
+        if (!confirm('Вы уверены, что хотите удалить этого сотрудника?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+</script>
+<script>
+    // ====== Маска телефона +7 (XXX) XXX-XX-XX ======
+
+    function applyPhoneMask(digits) {
+        if (digits.length === 0) return '';
+        const d = digits;
+        let result = '+7 (';
+        // Первые 3 цифры — код
+        result += d.slice(0, Math.min(3, d.length));
+        if (d.length < 3) return result;
+        // Закрываем скобку и следующие 3 цифры
+        result += ') ';
+        result += d.slice(3, Math.min(6, d.length));
+        if (d.length <= 6) return result;
+        // Первые 2 цифры третьей группы
+        result += '-' + d.slice(6, Math.min(8, d.length));
+        if (d.length <= 8) return result;
+        // Последние 2 цифры
+        result += '-' + d.slice(8, 10);
+        return result;
+    }
+
+    function getRawDigits(maskedValue) {
+        let digits = (maskedValue || '').replace(/\D/g, '');
+        if (digits.startsWith('7') || digits.startsWith('8')) digits = digits.slice(1);
+        return digits.slice(0, 10);
+    }
+
+    function updatePhoneHint(digits) {
+        const hint = document.getElementById('phoneHint');
+        if (!hint) return;
+        if (digits.length === 0) {
+            hint.className = 'field-hint';
+            hint.innerHTML = '<i class="fas fa-phone"></i><span>Формат: +7 (999) 123-45-67 &mdash; цифры вводятся автоматически</span>';
+        } else if (digits.length < 10) {
+            hint.className = 'field-hint hint-warning';
+            hint.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Введите ещё ' + (10 - digits.length) + ' цифр...</span>';
+        } else {
+            hint.className = 'field-hint hint-success';
+            hint.innerHTML = '<i class="fas fa-check-circle"></i><span>Номер указан полностью</span>';
+        }
+    }
+
+    function handlePhoneKeydown(e, input) {
+        // Служебные клавиши — разрешаем без изменений
+        if (e.ctrlKey || e.metaKey) return;
+        if (['Tab', 'Home', 'End', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+
+        // BACKSPACE — удаляем последнюю цифру из маски
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            const digits = getRawDigits(input.value);
+            if (digits.length === 0) return;
+            const newDigits = digits.slice(0, -1);
+            input.value = applyPhoneMask(newDigits);
+            setTimeout(() => input.setSelectionRange(input.value.length, input.value.length), 0);
+            updatePhoneHint(newDigits);
+            return;
+        }
+
+        // DELETE — очищаем поле полностью
+        if (e.key === 'Delete') {
+            e.preventDefault();
+            input.value = '';
+            updatePhoneHint('');
+            return;
+        }
+
+        // Блокируем не-цифры
+        if (!/^\d$/.test(e.key)) {
+            e.preventDefault();
+            return;
+        }
+
+        // Не даём вводить больше 10 цифр
+        const digits = getRawDigits(input.value);
+        if (digits.length >= 10) {
+            e.preventDefault();
+            return;
+        }
+
+        // Добавляем цифру к маске
+        e.preventDefault();
+        const newDigits = digits + e.key;
+        input.value = applyPhoneMask(newDigits);
+        setTimeout(() => input.setSelectionRange(input.value.length, input.value.length), 0);
+        updatePhoneHint(newDigits);
+    }
+
+    function handlePhoneInput(input) {
+        // Обрабатываем вставку через Ctrl+V или мобильный ввод
+        const digits = getRawDigits(input.value);
+        input.value = applyPhoneMask(digits);
+        setTimeout(() => input.setSelectionRange(input.value.length, input.value.length), 0);
+        updatePhoneHint(digits);
+    }
+
+    function setPhoneDisplay(rawPhone) {
+        const input = document.getElementById('phone');
+        if (!input) return;
+        const digits = getRawDigits(rawPhone || '');
+        input.value = applyPhoneMask(digits);
+        updatePhoneHint(digits);
+    }
+</script>
+<script>
+    function filterTable(inputEl) {
+        const card = inputEl.closest('.card');
+        const table = card ? card.querySelector('table') : null;
+        if (!table) return;
+        const term = inputEl.value.trim().toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(term) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

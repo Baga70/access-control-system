@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Логи доступа - Система управления доступом{% endblock %}
+
+{% block content %}
+<h1><i class="fas fa-history"></i> Логи доступа</h1>
+
+<div class="filters">
+    <form method="GET" action="{{ url_for('logs') }}" id="filterForm">
+        <div class="filters-grid">
+            <div class="form-group">
+                <label>Сотрудник</label>
+                <select name="employee_id" id="employeeId">
+                    <option value="">Все сотрудники</option>
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}" {% if filter_employee_id==emp.id|string %}selected{% endif %}>
+                        {{ emp.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Точка доступа</label>
+                <select name="point_id" id="pointId">
+                    <option value="">Все точки</option>
+                    {% for point in points %}
+                    <option value="{{ point.id }}" {% if filter_point_id==point.id|string %}selected{% endif %}>
+                        {{ point.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Результат</label>
+                <select name="result" id="result">
+                    <option value="">Все результаты</option>
+                    {% set result_labels = {'granted': 'Разрешён', 'denied': 'Отклонён', 'expired': 'Истёк', 'inactive':
+                    'Неактивен'} %}
+                    {% for res in results %}
+                    <option value="{{ res }}" {% if filter_result==res %}selected{% endif %}>{{ result_labels.get(res,
+                        res) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Дата от</label>
+                <input type="date" name="date_from" value="{{ filter_date_from }}">
+            </div>
+
+            <div class="form-group">
+                <label>Дата до</label>
+                <input type="date" name="date_to" value="{{ filter_date_to }}">
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Применить фильтры</button>
+            <a href="{{ url_for('logs') }}" class="btn btn-secondary"><i class="fas fa-redo"></i> Сбросить</a>
+            <a href="{{ url_for('export_logs', employee_id=filter_employee_id, point_id=filter_point_id, result=filter_result, date_from=filter_date_from, date_to=filter_date_to) }}"
+                class="btn btn-success"><i class="fas fa-download"></i> Экспорт CSV</a>
+        </div>
+    </form>
+</div>
+
+<div class="search-wrapper">
+    <div class="search-box">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="logsSearch" placeholder="Быстрый поиск по таблице..." oninput="filterTable(this)">
+        <button class="search-clear" onclick="clearSearch('logsSearch', this)" tabindex="-1"><i
+                class="fas fa-times"></i></button>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Время</th>
+                <th>Сотрудник</th>
+                <th>Точка доступа</th>
+                <th>Ключ</th>
+                <th>Уровень</th>
+                <th>Результат</th>
+                <th>Причина</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.access_time.strftime('%Y-%m-%d %H:%M:%S') if log.access_time else '' }}</td>
+                <td>{{ log.full_name }}</td>
+                <td>{{ log.point_name }}</td>
+                <td>{{ log.key_identifier }}</td>
+                <td>{{ log.level_name }}</td>
+                <td>
+                    {% if log.access_result == 'granted' %}
+                    <span class="log-granted">Разрешен</span>
+                    {% elif log.access_result == 'denied' %}
+                    <span class="log-denied">Отклонен</span>
+                    {% elif log.access_result == 'expired' %}
+                    <span class="log-expired">Истек</span>
+                    {% else %}
+                    <span class="log-inactive">{{ log.access_result }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ log.reason or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if not logs %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <p>Нет логов для отображения</p>
+    </div>
+    {% endif %}
+</div>
+<script>
+    function filterTable(inputEl) {
+        const card = document.querySelector('.card');
+        const table = card ? card.querySelector('table') : null;
+        if (!table) return;
+        const term = inputEl.value.trim().toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(term) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

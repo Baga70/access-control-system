@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Группы - Система управления доступом{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-users-cog"></i> Группы сотрудников</h2>
+        <button class="btn btn-primary" onclick="openModal('create')"><i class="fas fa-plus"></i> Добавить</button>
+    </div>
+
+    <div class="search-wrapper">
+        <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="groupsSearch" placeholder="Поиск по группам..." oninput="filterTable(this)">
+            <button class="search-clear" onclick="clearSearch('groupsSearch', this)" tabindex="-1"><i
+                    class="fas fa-times"></i></button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Описание</th>
+                <th>Уровни доступа</th>
+                <th>Сотрудники</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for group in groups %}
+            <tr>
+                <td>{{ group.id }}</td>
+                <td>{{ group.name }}</td>
+                <td>{{ group.description or '-' }}</td>
+                <td>{{ group.levels | length }} уровней</td>
+                <td>{{ group.employee_ids | length }} сотрудников</td>
+                <td style="white-space: nowrap;">
+                    <button class="btn btn-sm btn-primary" onclick="openModal('edit', {{ group | tojson }})"
+                        title="Изменить"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteGroup({{ group.id }})" title="Удалить"><i
+                            class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Модальное окно -->
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Добавить группу</h2>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <form id="groupForm">
+            <input type="hidden" id="groupId">
+
+            <div class="form-group">
+                <label>Название *</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label>Описание</label>
+                <textarea id="description"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Уровни доступа</label>
+                <div class="checkbox-list" style="max-height: 150px;">
+                    {% for level in levels %}
+                    <div class="checkbox-item">
+                        <input type="checkbox" name="levels" value="{{ level.id }}" id="level_{{ level.id }}">
+                        <label for="level_{{ level.id }}">{{ level.name }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Сотрудники</label>
+                <div class="checkbox-list" style="max-height: 200px;">
+                    {% for emp in employees %}
+                    <div class="checkbox-item">
+                        <input type="checkbox" name="employees" value="{{ emp.id }}" id="emp_{{ emp.id }}">
+                        <label for="emp_{{ emp.id }}">{{ emp.full_name }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(action, data = null) {
+        const modal = document.getElementById('modal');
+        const form = document.getElementById('groupForm');
+        const title = document.getElementById('modalTitle');
+
+        if (action === 'create') {
+            title.textContent = 'Добавить группу';
+            form.reset();
+            document.getElementById('groupId').value = '';
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        } else if (action === 'edit') {
+            title.textContent = 'Изменить группу';
+            document.getElementById('groupId').value = data.id;
+            document.getElementById('name').value = data.name || '';
+            document.getElementById('description').value = data.description || '';
+
+            // Отмечаем уровни доступа
+            if (data.levels) {
+                data.levels.forEach(levelId => {
+                    const checkbox = document.getElementById('level_' + levelId);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+
+            // Отмечаем сотрудников
+            if (data.employee_ids) {
+                data.employee_ids.forEach(empId => {
+                    const checkbox = document.getElementById('emp_' + empId);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+        }
+
+        modal.style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    window.onclick = function (event) {
+        const modal = document.getElementById('modal');
+        if (event.target === modal) {
+            closeModal();
+        }
+    }
+
+    document.getElementById('groupForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const levels = Array.from(document.querySelectorAll('input[name="levels"]:checked')).map(cb => parseInt(cb.value));
+        const employees = Array.from(document.querySelectorAll('input[name="employees"]:checked')).map(cb => parseInt(cb.value));
+
+        const formData = {
+            name: document.getElementById('name').value,
+            description: document.getElementById('description').value,
+            levels: levels,
+            employees: employees
+        };
+
+        const groupId = document.getElementById('groupId').value;
+        const url = groupId
+            ? `/api/groups/${groupId}`
+            : '/api/groups';
+
+        const method = groupId ? 'PUT' : 'POST';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    });
+
+    async function deleteGroup(id) {
+        if (!confirm('Вы уверены, что хотите удалить эту группу?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/groups/${id}`, { method: 'DELETE' });
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+</script>
+<script>
+    function filterTable(inputEl) {
+        const card = inputEl.closest('.card');
+        const table = card ? card.querySelector('table') : null;
+        if (!table) return;
+        const term = inputEl.value.trim().toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(term) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

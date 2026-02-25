@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Prometheus/Grafana data
+prometheus_data/
+grafana_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups (могут содержать чувствительные данные)
+backups/
+
+# Pytest cache
+.pytest_cache/
+pytest_cache/
+
+# Environment / secrets
+.env
+*.env
+config.local.py
+
+# Windows
+desktop.ini

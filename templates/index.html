@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Главная - Система управления доступом{% endblock %}
+
+{% block content %}
+<h1><i class="fas fa-tachometer-alt"></i> Панель управления</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3>Активных сотрудников</h3>
+                <div class="value">{{ stats.get('employees', 0) }}</div>
+            </div>
+            <i class="fas fa-users" style="font-size: 48px; opacity: 0.2; color: #667eea;"></i>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3>Активных ключей</h3>
+                <div class="value">{{ stats.get('keys', 0) }}</div>
+            </div>
+            <i class="fas fa-key" style="font-size: 48px; opacity: 0.2; color: #764ba2;"></i>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3>Точек доступа</h3>
+                <div class="value">{{ stats.get('points', 0) }}</div>
+            </div>
+            <i class="fas fa-door-open" style="font-size: 48px; opacity: 0.2; color: #48bb78;"></i>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3>Логов сегодня</h3>
+                <div class="value">{{ stats.get('today_logs', 0) }}</div>
+            </div>
+            <i class="fas fa-history" style="font-size: 48px; opacity: 0.2; color: #4299e1;"></i>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-clock"></i> Последние события</h2>
+        <a href="{{ url_for('logs') }}" class="btn btn-sm btn-secondary"><i class="fas fa-list"></i> Все логи</a>
+    </div>
+    
+    {% if recent_logs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Время</th>
+                <th>Сотрудник</th>
+                <th>Точка доступа</th>
+                <th>Уровень</th>
+                <th>Результат</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in recent_logs %}
+            <tr>
+                <td>{{ log.access_time.strftime('%Y-%m-%d %H:%M:%S') if log.access_time else '' }}</td>
+                <td>{{ log.full_name }}</td>
+                <td>{{ log.point_name }}</td>
+                <td>{{ log.level_name }}</td>
+                <td>
+                    {% if log.access_result == 'granted' %}
+                        <span class="log-granted">Разрешен</span>
+                    {% elif log.access_result == 'denied' %}
+                        <span class="log-denied">Отклонен</span>
+                    {% elif log.access_result == 'expired' %}
+                        <span class="log-expired">Истек</span>
+                    {% else %}
+                        <span class="log-inactive">{{ log.access_result }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon"><i class="fas fa-inbox"></i></div>
+        <p>Нет событий для отображения</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

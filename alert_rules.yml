@@ -1,0 +1,82 @@
+# Правила alerting для Prometheus
+
+groups:
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # Алерт при высокой загрузке CPU
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая загрузка CPU на {{ $labels.instance }}"
+          description: "CPU используется на {{ $value }}% более 5 минут"
+
+      # Алерт при нехватке памяти
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокое использование памяти на {{ $labels.instance }}"
+          description: "Память используется на {{ $value }}% более 5 минут"
+
+      # Алерт при нехватке места на диске
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{fstype!="rootfs"} / node_filesystem_size_bytes{fstype!="rootfs"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Мало места на диске на {{ $labels.instance }}"
+          description: "Свободно только {{ $value }}% места на {{ $labels.device }}"
+
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # Алерт при большом количестве активных соединений
+      - alert: TooManyDatabaseConnections
+        expr: pg_stat_database_numbackends{datname="access_control_db"} > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Слишком много активных соединений с БД"
+          description: "{{ $value }} активных соединений с базой данных access_control_db"
+
+      # Алерт при медленных запросах
+      - alert: SlowQueries
+        expr: pg_stat_database_blk_read_time{datname="access_control_db"} / pg_stat_database_xact_commit{datname="access_control_db"} > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Медленные запросы к базе данных"
+          description: "Среднее время чтения с диска слишком высокое: {{ $value }}ms"
+
+      # Алерт при недоступности PostgreSQL
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL недоступен"
+          description: "PostgreSQL экспортер не отвечает более 1 минуты"
+
+  - name: application_alerts
+    interval: 30s
+    rules:
+      # Алерт при недоступности Flask приложения
+      - alert: FlaskAppDown
+        expr: up{job="flask-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Flask приложение недоступно"
+          description: "Flask приложение не отвечает более 2 минут"
+

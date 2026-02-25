@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Точки доступа - Система управления доступом{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-door-open"></i> Точки доступа</h2>
+        <button class="btn btn-primary" onclick="openModal('create')"><i class="fas fa-plus"></i> Добавить</button>
+    </div>
+
+    <div class="search-wrapper">
+        <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="pointsSearch" placeholder="Поиск по точкам доступа..." oninput="filterTable(this)">
+            <button class="search-clear" onclick="clearSearch('pointsSearch', this)" tabindex="-1"><i
+                    class="fas fa-times"></i></button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Местоположение</th>
+                <th>Описание</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for point in points %}
+            <tr>
+                <td>{{ point.id }}</td>
+                <td>{{ point.name }}</td>
+                <td>{{ point.location or '-' }}</td>
+                <td>{{ point.description or '-' }}</td>
+                <td style="white-space: nowrap;">
+                    <button class="btn btn-sm btn-primary" onclick="openModal('edit', {{ point | tojson }})"
+                        title="Изменить"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deletePoint({{ point.id }})" title="Удалить"><i
+                            class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Модальное окно -->
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Добавить точку доступа</h2>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <form id="pointForm">
+            <input type="hidden" id="pointId">
+
+            <div class="form-group">
+                <label>Название *</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label>Местоположение</label>
+                <input type="text" id="location">
+            </div>
+
+            <div class="form-group">
+                <label>Описание</label>
+                <textarea id="description"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(action, data = null) {
+        const modal = document.getElementById('modal');
+        const form = document.getElementById('pointForm');
+        const title = document.getElementById('modalTitle');
+
+        if (action === 'create') {
+            title.textContent = 'Добавить точку доступа';
+            form.reset();
+            document.getElementById('pointId').value = '';
+        } else if (action === 'edit') {
+            title.textContent = 'Изменить точку доступа';
+            document.getElementById('pointId').value = data.id;
+            document.getElementById('name').value = data.name || '';
+            document.getElementById('location').value = data.location || '';
+            document.getElementById('description').value = data.description || '';
+        }
+
+        modal.style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    window.onclick = function (event) {
+        const modal = document.getElementById('modal');
+        if (event.target === modal) {
+            closeModal();
+        }
+    }
+
+    document.getElementById('pointForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const formData = {
+            name: document.getElementById('name').value,
+            location: document.getElementById('location').value,
+            description: document.getElementById('description').value
+        };
+
+        const pointId = document.getElementById('pointId').value;
+        const url = pointId
+            ? `/api/points/${pointId}`
+            : '/api/points';
+
+        const method = pointId ? 'PUT' : 'POST';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    });
+
+    async function deletePoint(id) {
+        if (!confirm('Вы уверены, что хотите удалить эту точку доступа?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/points/${id}`, { method: 'DELETE' });
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+</script>
+<script>
+    function filterTable(inputEl) {
+        const card = inputEl.closest('.card');
+        const table = card ? card.querySelector('table') : null;
+        if (!table) return;
+        const term = inputEl.value.trim().toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(term) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

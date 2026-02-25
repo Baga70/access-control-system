@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Уровни доступа - Система управления доступом{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-layer-group"></i> Уровни доступа</h2>
+        <button class="btn btn-primary" onclick="openModal('create')"><i class="fas fa-plus"></i> Добавить</button>
+    </div>
+
+    <div class="search-wrapper">
+        <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="levelsSearch" placeholder="Поиск по уровням доступа..." oninput="filterTable(this)">
+            <button class="search-clear" onclick="clearSearch('levelsSearch', this)" tabindex="-1"><i
+                    class="fas fa-times"></i></button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Описание</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for level in levels %}
+            <tr>
+                <td>{{ level.id }}</td>
+                <td>{{ level.name }}</td>
+                <td>{{ level.description or '-' }}</td>
+                <td style="white-space: nowrap;">
+                    <button class="btn btn-sm btn-primary" onclick="openModal('edit', {{ level | tojson }})"
+                        title="Изменить"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteLevel({{ level.id }})" title="Удалить"><i
+                            class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Модальное окно -->
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Добавить уровень доступа</h2>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <form id="levelForm">
+            <input type="hidden" id="levelId">
+
+            <div class="form-group">
+                <label>Название *</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label>Описание</label>
+                <textarea id="description"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(action, data = null) {
+        const modal = document.getElementById('modal');
+        const form = document.getElementById('levelForm');
+        const title = document.getElementById('modalTitle');
+
+        if (action === 'create') {
+            title.textContent = 'Добавить уровень доступа';
+            form.reset();
+            document.getElementById('levelId').value = '';
+        } else if (action === 'edit') {
+            title.textContent = 'Изменить уровень доступа';
+            document.getElementById('levelId').value = data.id;
+            document.getElementById('name').value = data.name || '';
+            document.getElementById('description').value = data.description || '';
+        }
+
+        modal.style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    window.onclick = function (event) {
+        const modal = document.getElementById('modal');
+        if (event.target === modal) {
+            closeModal();
+        }
+    }
+
+    document.getElementById('levelForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const formData = {
+            name: document.getElementById('name').value,
+            description: document.getElementById('description').value
+        };
+
+        const levelId = document.getElementById('levelId').value;
+        const url = levelId
+            ? `/api/levels/${levelId}`
+            : '/api/levels';
+
+        const method = levelId ? 'PUT' : 'POST';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    });
+
+    async function deleteLevel(id) {
+        if (!confirm('Вы уверены, что хотите удалить этот уровень доступа?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/levels/${id}`, { method: 'DELETE' });
+            const result = await response.json();
+
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Ошибка: ' + result.error);
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+</script>
+<script>
+    function filterTable(inputEl) {
+        const card = inputEl.closest('.card');
+        const table = card ? card.querySelector('table') : null;
+        if (!table) return;
+        const term = inputEl.value.trim().toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(term) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}
